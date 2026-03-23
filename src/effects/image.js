@@ -96,7 +96,7 @@ export class ImageEffect {
     static getDefaults() {
         return {
             imageEnabled: false,
-            imageFilename: 'Grain – Light 1.png',
+            imageFilename: 'noise.png',
             imageInvert: false,
             imageOpacity: 1.0,
             imageScale: 1.0,

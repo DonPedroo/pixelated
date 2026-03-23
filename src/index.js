@@ -31,7 +31,7 @@ export default class Sketch {
 
         // Texture Cache System
         this.textures = {};
-        this.imageFiles = import.meta.glob(['./tex/*.{png,jpg,jpeg,webp}', './assets/*.{png,jpg,jpeg,webp}'], { eager: true, as: 'url' });
+        this.imageFiles = import.meta.glob(['./tex/*.{png,jpg,jpeg,webp}'], { eager: true, as: 'url' });
 
         // GUI Initialization
         this.gui = new GUI();

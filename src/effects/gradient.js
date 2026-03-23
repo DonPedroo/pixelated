@@ -414,7 +414,7 @@ export const getGradientColorNode = (uvNode, uniforms, params) => {
     // Apply IGN Dithering if enabled
     const { uGradientIGNDither, uGradientDitherStrength, uResolution, uDpr } = uniforms;
     If(uGradientIGNDither.greaterThan(0.5), () => {
-        // Use uv() instead of uvNode (which might be distorted) to match screen-space dithering in testGradient.js
+        // Use uv() instead of uvNode (which might be distorted) to match screen-space dithering
         // Multiply by uDpr to ensure pixel-space resolution on high-DPI screens
         const pixelPos = uv().mul(uResolution.mul(uDpr));
 
