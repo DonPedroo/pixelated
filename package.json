@@ -1,5 +1,6 @@
 {
   "name": "pixelated",
+  "description": "High-performance real-time engine for generating procedural patterns, parametric 3D wireframes, and organic motion graphics.",
   "version": "0.0.0",
   "private": true,
   "type": "module",
