@@ -35,4 +35,4 @@ for (const path in themeFiles) {
     themes[key] = themeFiles[path].default || themeFiles[path];
 }
 
-export const defaultThemeName = '2026-03-03 11:32:34';
+export const defaultThemeName = Object.keys(themes).sort()[0] || '';

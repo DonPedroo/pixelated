@@ -115,7 +115,7 @@ export default class Sketch {
 
         // Auto-Save / Initial Theme Setup
         this.ignoreAutoSave = true;
-        const autoSavedSettings = localStorage.getItem('next_now_sketch_016_autosave');
+        const autoSavedSettings = localStorage.getItem('pixelated_sketch_autosave');
         if (autoSavedSettings) {
             try {
                 const parsedSettings = JSON.parse(autoSavedSettings);
@@ -153,7 +153,7 @@ export default class Sketch {
         // Drag and Drop for PNG metadata
         this.dropCleanup = setupMetadataDrop(
             this.container,
-            'next-now-settings',
+            'pixelated-settings',
             (params) => {
                 const baseThemeName = params.theme || defaultThemeName;
                 const baseTheme = themes[baseThemeName] || themes[defaultThemeName];
@@ -449,7 +449,7 @@ export default class Sketch {
                 serializableParams[key] = value;
             }
         }
-        localStorage.setItem('next_now_sketch_016_autosave', JSON.stringify(serializableParams));
+        localStorage.setItem('pixelated_sketch_autosave', JSON.stringify(serializableParams));
     }
 
     onResize() {
@@ -585,7 +585,7 @@ export default class Sketch {
         // Record GUI states into params before saving
         this.params.guiFolderStates = getFolderStates(this.gui);
 
-        saveCanvasToPNG(this.renderer.domElement, this.params, 'next-now-settings', filename);
+        saveCanvasToPNG(this.renderer.domElement, this.params, 'pixelated-settings', filename);
     }
 
     async exportSequence() {

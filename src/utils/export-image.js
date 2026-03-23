@@ -5,7 +5,7 @@ import { injectMetadata } from './png-metadata.js';
  * 
  * @param {HTMLCanvasElement} canvas - The canvas to capture.
  * @param {Object} metadata - JSON serializable object to embed.
- * @param {string} metadataKey - The key for the tEXt chunk (e.g., 'next-now-settings').
+ * @param {string} metadataKey - The key for the tEXt chunk (e.g., 'pixelated-settings').
  * @param {string} filename - The output filename.
  */
 export function saveCanvasToPNG(canvas, metadata, metadataKey, filename) {
