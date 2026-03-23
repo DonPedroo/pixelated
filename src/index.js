@@ -47,7 +47,7 @@ export default class Sketch {
         // Renderer
         this.renderer = new THREE.WebGPURenderer({
             antialias: true,
-            alpha: true, // Enabling alpha for pass transparency
+            alpha: true,
             preserveDrawingBuffer: true
         });
         this.renderer.setSize(this.width, this.height);
@@ -167,7 +167,15 @@ export default class Sketch {
     }
 
     async init() {
-        await this.renderer.init();
+        try {
+            await this.renderer.init();
+            console.log(`Renderer initialized with ${this.renderer.backend.name} backend`);
+        } catch (e) {
+            console.error('Failed to initialize WebGPURenderer:', e);
+            // If it fails, maybe it's Safari failing to pick WebGL automatically
+            // We could try forceWebGL: true here as a last resort in some contexts,
+            // but for now we just log for debugging.
+        }
         this.initialized = true;
     }
 
@@ -200,6 +208,10 @@ export default class Sketch {
         const w = Math.floor(this.width);
         const h = Math.floor(this.height);
 
+        // Backend optimization: WebGL is slower with RTT/RenderTarget swaps.
+        // We bypass intermediate RTTs on WebGL to keep it as a single monolithic shader pass.
+        const isWebGPU = this.renderer.backend.name === 'WebGPU';
+
         // Start with sampled scene or chroma distortion
         let currentNode;
         if (this.params.distortionChromaEnabled && this.postProcessingEffect) {
@@ -210,21 +222,37 @@ export default class Sketch {
             if (this.params.pixelateEnabled && this.pixelateEffect) {
                 const pixelatedUv = this.pixelateEffect.applyPixelation(vUv);
                 const pixelatedNode = sceneTexture.sample(pixelatedUv);
-                sourceTextureToSample = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType });
+                
+                if (isWebGPU) {
+                    sourceTextureToSample = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType });
+                } else {
+                    sourceTextureToSample = pixelatedNode;
+                }
             }
 
             const chromaNode = this.postProcessingEffect.buildSamplingNode(sourceTextureToSample, vUv, null);
-            currentNode = rtt(chromaNode, w, h, { type: THREE.HalfFloatType }).sample(vUv);
+            
+            if (isWebGPU) {
+                currentNode = rtt(chromaNode, w, h, { type: THREE.HalfFloatType }).sample(vUv);
+            } else {
+                currentNode = chromaNode;
+            }
         } else {
             if (this.params.pixelateEnabled && this.pixelateEffect) {
                 const pixelatedUv = this.pixelateEffect.applyPixelation(vUv);
                 const pixelatedNode = sceneTexture.sample(pixelatedUv);
-                // Cache pixelation in an intermediate RTT to split the shader pipeline 
-                // and prevent FPS drops when standard effects like Rings are enabled.
-                currentNode = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType }).sample(vUv);
+                
+                if (isWebGPU) {
+                    currentNode = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType }).sample(vUv);
+                } else {
+                    currentNode = pixelatedNode;
+                }
             } else {
-                // Consistently split the shader before standard effects to avoid monolithic compilation
-                currentNode = rtt(sceneTexture.sample(vUv), w, h, { type: THREE.HalfFloatType }).sample(vUv);
+                if (isWebGPU) {
+                    currentNode = rtt(sceneTexture.sample(vUv), w, h, { type: THREE.HalfFloatType }).sample(vUv);
+                } else {
+                    currentNode = sceneTexture.sample(vUv);
+                }
             }
         }
 

@@ -1,6 +1,6 @@
 # Pixelated & Parametric Motion Engine
 
-A high-performance real-time engine for generating procedural patterns, parametric 3D wireframes, and organic motion graphics. Built with **Three.js (WebGPU)** and **TSL (Three Shading Language)**.
+A high-performance real-time engine for generating procedural patterns, parametric 3D wireframes, and organic motion graphics. Built with **Three.js (WebGPU/WebGL)** and **TSL (Three Shading Language)**.
 
 This project provides a modular environment for building complex visual systems where geometry, deformation, and motion are controlled directly through real-time parameters.
 
@@ -59,7 +59,7 @@ Designed specifically for digital creators and social media.
 -   **Metadata Drag & Drop**: Every exported PNG contains its full project settings as metadata. Drop any PNG back into the app to instantly restore the exact state used to create it.
 
 ## 🛠 Technology Stack
--   **Three.js (WebGPU)**: Next-generation rendering pipe.
+-   **Three.js (WebGPU/WebGL)**: Next-generation rendering pipe with automatic fallback.
 -   **TSL**: Shaders written in pure JavaScript/TypeScript via Three Shading Language.
 -   **Vite**: Fast development and building.
 -   **lil-gui**: Real-time parameter control.
