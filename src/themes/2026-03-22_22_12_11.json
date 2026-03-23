@@ -17,7 +17,7 @@
             "gamma": 0.8076,
             "blendMode": "screen",
             "invert": false,
-            "filename": "4de9b085365720fc83899ea24a8676e562a20176.png"
+            "filename": "noise.png"
         },
         {
             "enabled": false,
@@ -31,7 +31,7 @@
             "gamma": 1,
             "blendMode": "mix",
             "invert": false,
-            "filename": "Grain – Light 1.png"
+            "filename": "noise.png"
         },
         {
             "enabled": false,
@@ -45,7 +45,7 @@
             "gamma": 1,
             "blendMode": "mix",
             "invert": false,
-            "filename": "Grain – Light 1.png"
+            "filename": "noise.png"
         },
         {
             "enabled": false,
@@ -59,7 +59,7 @@
             "gamma": 1,
             "blendMode": "mix",
             "invert": false,
-            "filename": "Grain – Light 1.png"
+            "filename": "noise.png"
         },
         {
             "enabled": false,
@@ -73,7 +73,7 @@
             "gamma": 1,
             "blendMode": "mix",
             "invert": false,
-            "filename": "Grain – Light 1.png"
+            "filename": "noise.png"
         }
     ],
     "gradientType": "Noise Based Gradient",
