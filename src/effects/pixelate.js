@@ -6,6 +6,7 @@ import { MaskEffect } from './masking.js';
  * Provides reusable logic for pixelation with TSL integration and Lil-GUI support.
  */
 export class PixelateEffect {
+    static id = 'PixelateEffect';
     static type = 'modifier';
     static order = 10;
 

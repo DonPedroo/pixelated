@@ -7,6 +7,7 @@ import { MaskEffect } from './masking.js';
  * Allows overlaying up to 5 procedural ring groups on the screen.
  */
 export class RingsEffect {
+    static id = 'RingsEffect';
     static type = 'standard';
     static order = 50;
     static getDefaults() {

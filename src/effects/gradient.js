@@ -7,6 +7,7 @@ import { BRAND_COLORS } from '../settings.js';
  * Provides reusable logic for N-color gradients with TSL integration and Lil-GUI support.
  */
 export class GradientEffect {
+    static id = 'GradientEffect';
     static type = 'generator';
     static order = 10;
 

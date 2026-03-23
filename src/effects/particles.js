@@ -6,6 +6,7 @@ import * as THREE from 'three/webgpu';
  * Renders a grid of circular particles with Z-wave animation and 3D rotation.
  */
 export class ParticlesEffect {
+    static id = 'ParticlesEffect';
     static type = 'standard';
     static order = 30;
     static getDefaults() {

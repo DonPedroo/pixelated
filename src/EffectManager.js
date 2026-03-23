@@ -12,15 +12,17 @@ export class EffectManager {
 
         for (const path in modules) {
             const module = modules[path];
-            // Get the first exported class from the module
-            const exportedClasses = Object.values(module).filter(v => typeof v === 'function' && v.name && v.name.endsWith('Effect'));
+            // Filter for classes that have a static 'type' property (identifies them as effects)
+            const exportedClasses = Object.values(module).filter(v => typeof v === 'function' && v.type);
             const EffectClass = exportedClasses[0];
 
             // Only instantiate if it's a valid effect plugin (has static type)
-            if (EffectClass && EffectClass.type) {
+            if (EffectClass) {
                 const instance = new EffectClass(this.sketch);
                 this.effects.push(instance);
-                this.effectMap.set(EffectClass.name, instance);
+                // Use static id for robust mapping in production, fallback to name in dev
+                const key = EffectClass.id || EffectClass.name;
+                this.effectMap.set(key, instance);
             }
         }
     }
@@ -96,7 +98,8 @@ export class EffectManager {
             .sort((a, b) => (a.constructor.order || 0) - (b.constructor.order || 0));
 
         for (const effect of standardEffects) {
-            const enabledKey = this._getEnabledKey(effect.constructor.name);
+            const id = effect.constructor.id || effect.constructor.name;
+            const enabledKey = this._getEnabledKey(id);
             if (this.sketch.params[enabledKey] !== false) {
                 currentNode = effect.buildNode(currentNode, vUv);
             }

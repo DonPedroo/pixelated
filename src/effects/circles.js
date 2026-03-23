@@ -7,6 +7,7 @@ import { applyImageOverlayTSL } from './image.js';
  * Allows overlaying up to 5 textured circles on the screen.
  */
 export class CirclesEffect {
+    static id = 'CirclesEffect';
     static type = 'standard';
     static order = 10;
 

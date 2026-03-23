@@ -6,6 +6,7 @@ import * as THREE from 'three/webgpu';
  * Renders continuous wireframe objects using LineSegments and NodeMaterial based deformations.
  */
 export class WireframeShapesEffect {
+    static id = 'WireframeShapesEffect';
     static type = 'standard';
     static order = 35; // Rendering order
 

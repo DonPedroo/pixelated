@@ -90,6 +90,7 @@ export const applyImageOverlayTSL = Fn(([inputColor, vUv, uTexture, uConfig]) =>
  * Allows overlaying an image from the textures folder with various blending modes and scaling options.
  */
 export class ImageEffect {
+    static id = 'ImageEffect';
     static type = 'post';
     static order = 10;
     static getDefaults() {

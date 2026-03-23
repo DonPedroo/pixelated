@@ -1,6 +1,7 @@
 import { uniform, vec4, vec3, Fn, vec2, float, fract, dot, cos, sin, cross, mix, step, abs, clamp, int, Loop, If, color } from 'three/tsl';
 
 export class PostProcessingEffect {
+    static id = 'PostProcessingEffect';
     static type = 'post';
     static order = 20;
     static getDefaults() {
