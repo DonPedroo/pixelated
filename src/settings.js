@@ -24,6 +24,7 @@ export const BRAND_COLORS = {
  */
 const themeFiles = import.meta.glob('./themes/*.json', { eager: true });
 export const themes = {};
+export const themeOptions = {};
 
 for (const path in themeFiles) {
     const filename = path.split('/').pop().replace('.json', '');
@@ -31,8 +32,12 @@ for (const path in themeFiles) {
     const key = filename.replace(/^(\d{4}-\d{2}-\d{2})_(\d{2})_(\d{2})_(\d{2})$/, '$1 $2:$3:$4');
 
     // In Vite, eager JSON imports are the object itself
-    // If the JSON was imported via glob, it might have a .default property depending on Vite version/config
-    themes[key] = themeFiles[path].default || themeFiles[path];
+    const themeData = themeFiles[path].default || themeFiles[path];
+    themes[key] = themeData;
+
+    // Use creative name for dropdown if available
+    const displayName = themeData.name || key;
+    themeOptions[displayName] = key;
 }
 
-export const defaultThemeName = Object.keys(themes).sort()[0] || '';
+export const defaultThemeName = Object.values(themeOptions)[0] || '';

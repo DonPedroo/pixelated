@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu';
-import { vec2, uniform, int, pass, Fn, uv, rtt } from 'three/tsl';
+import { vec2, uniform, int, float, pass, Fn, uv, rtt } from 'three/tsl';
 import { createMainMaterial } from './material.js';
 import GUI from 'lil-gui';
-import { themes, defaultThemeName } from './settings.js';
+import { themes, themeOptions, defaultThemeName } from './settings.js';
 import { EffectManager } from './EffectManager.js';
 import { setupSketchGUI, getFolderStates, applyFolderStates } from './gui.js';
 import { saveCanvasToPNG } from './utils/export-image.js';
@@ -36,6 +36,7 @@ export default class Sketch {
         // GUI Initialization
         this.gui = new GUI();
         this.themes = themes;
+        this.themeOptions = themeOptions;
 
         this.params = {};
         this.effectManager = new EffectManager(this);
@@ -59,6 +60,8 @@ export default class Sketch {
         this.uDpr = uniform(Math.min(window.devicePixelRatio, 2));
         this.uResolution = uniform(vec2(this.width, this.height));
         this.uGlobalTime = uniform(0);
+        this.uLoopDuration = uniform(float(this.params.exportDuration || 4.0));
+        this.uPerfectLoop = uniform(this.params.perfectLoop ? 1 : 0);
         this.resolution = this.uResolution; // alias for effects
         this.dpr = this.uDpr; // alias for effects
 
@@ -68,6 +71,8 @@ export default class Sketch {
             uResolution: this.uResolution,
             uDpr: this.uDpr,
             uGlobalTime: this.uGlobalTime,
+            uLoopDuration: this.uLoopDuration,
+            uPerfectLoop: this.uPerfectLoop,
             uAnimationSpeed: uniform(vec2(this.params.animationSpeed, this.params.animationSpeed * 0.8)),
             uDistortionAmplitude: uniform(this.params.distortionAmplitude),
             uDistortionFrequency: uniform(this.params.distortionFrequency),
@@ -122,7 +127,8 @@ export default class Sketch {
                 // Merge GlobalDefaults -> Current Theme in autosave (if any) -> Parsed Settings
                 const baseThemeName = parsedSettings.theme || defaultThemeName;
                 const baseTheme = themes[baseThemeName] || themes[defaultThemeName];
-                const mergedSettings = deepMerge({}, this.globalDefaults, { theme: baseThemeName }, baseTheme, parsedSettings);
+                const themeSettings = baseTheme ? (baseTheme.params || baseTheme) : {};
+                const mergedSettings = deepMerge({}, this.globalDefaults, { theme: baseThemeName }, themeSettings, parsedSettings);
                 this.loadSettings(mergedSettings);
             } catch (e) {
                 console.error("Failed to load auto-saved settings", e);
@@ -157,7 +163,8 @@ export default class Sketch {
             (params) => {
                 const baseThemeName = params.theme || defaultThemeName;
                 const baseTheme = themes[baseThemeName] || themes[defaultThemeName];
-                const mergedSettings = deepMerge({}, this.globalDefaults, { theme: baseThemeName }, baseTheme, params);
+                const themeSettings = baseTheme ? (baseTheme.params || baseTheme) : {};
+                const mergedSettings = deepMerge({}, this.globalDefaults, { theme: baseThemeName }, themeSettings, params);
                 this.loadSettings(mergedSettings);
             }
         );
@@ -218,19 +225,19 @@ export default class Sketch {
             // Optimization: RTT pre-pass the heavy pixelation module so we don't 
             // inject its math 16 times per pixel inside the Chroma radial sampling loop.
             let sourceTextureToSample = sceneTexture;
+            let uvTransform = null;
 
             if (this.params.pixelateEnabled && this.pixelateEffect) {
                 const pixelatedUv = this.pixelateEffect.applyPixelation(vUv);
                 const pixelatedNode = sceneTexture.sample(pixelatedUv);
                 
-                if (isWebGPU) {
-                    sourceTextureToSample = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType });
-                } else {
-                    sourceTextureToSample = pixelatedNode;
-                }
+                // Optimized: Always use RTT when combining with heavy distortion loops
+                // to avoid re-evaluating complex pixelate math 16+ times per pixel.
+                sourceTextureToSample = rtt(pixelatedNode, w, h, { type: THREE.HalfFloatType });
+                uvTransform = null;
             }
 
-            const chromaNode = this.postProcessingEffect.buildSamplingNode(sourceTextureToSample, vUv, null);
+            const chromaNode = this.postProcessingEffect.buildSamplingNode(sourceTextureToSample, vUv, uvTransform);
             
             if (isWebGPU) {
                 currentNode = rtt(chromaNode, w, h, { type: THREE.HalfFloatType }).sample(vUv);
@@ -306,10 +313,8 @@ export default class Sketch {
         if (!theme) return;
 
         // Reset to global defaults first, then apply theme
-        // Actually, we want to keep current params and MERGE the theme
-        // But the requirement says "falls back to default component-level definitions"
-        // So we should merge: GlobalDefaults -> Theme
-        const mergedSettings = deepMerge({}, this.globalDefaults, { theme: themeName }, theme);
+        const settings = theme.params || theme;
+        const mergedSettings = deepMerge({}, this.globalDefaults, settings, { theme: themeName });
         this.loadSettings(mergedSettings);
     }
 
@@ -423,6 +428,10 @@ export default class Sketch {
     updateAnimationSpeeds() {
         const dur = this.params.exportDuration || 4;
         const isLoop = this.params.perfectLoop;
+
+        // Sync duration/loop uniforms
+        if (this.uLoopDuration) this.uLoopDuration.value = dur;
+        if (this.uPerfectLoop) this.uPerfectLoop.value = isLoop ? 1 : 0;
 
         // Update base speeds (gradient/distortion)
         this.updateBaseSpeeds(isLoop, dur, this.getQuantizedSpeed.bind(this));
@@ -585,7 +594,28 @@ export default class Sketch {
         // Record GUI states into params before saving
         this.params.guiFolderStates = getFolderStates(this.gui);
 
+        const multiplier = this.params.exportScaleMultiplier || 1;
+        const exportWidth = Math.floor(this.width * multiplier);
+        const exportHeight = Math.floor(this.height * multiplier);
+
+        // Store original state
+        const originalWidth = this.width;
+        const originalHeight = this.height;
+
+        // Resize for export
+        this.renderer.setSize(exportWidth, exportHeight, false);
+        this.uResolution.value.set(exportWidth, exportHeight);
+        
+        // Force a render at the new size
+        this.postProcessing.render();
+
+        // Save
         saveCanvasToPNG(this.renderer.domElement, this.params, 'pixelated-settings', filename);
+
+        // Restore original size
+        this.renderer.setSize(originalWidth, originalHeight);
+        this.uResolution.value.set(originalWidth, originalHeight);
+        this.postProcessing.render(); // Re-render at original size for UI consistency
     }
 
     async exportSequence() {
@@ -636,8 +666,17 @@ export default class Sketch {
                     // Drives the exact same math as the live canvas!
                     this.update(0);
 
-                    // Yield to keep the browser responsive, awaiting the GPU compositor to finish
-                    await new Promise(r => requestAnimationFrame(r));
+                    // Yield to keep the browser responsive.
+                    // This is ONLY for the export process. Regular playback (setAnimationLoop) 
+                    // still uses the default requestAnimationFrame behavior and will pause in background as expected.
+                    // requestAnimationFrame pauses in the background, so we use a fallback for exported frames.
+                    if (document.visibilityState === 'visible') {
+                        await new Promise(r => requestAnimationFrame(r));
+                    } else {
+                        // In background tabs, requestAnimationFrame won't fire.
+                        // We use a small timeout to keep the loop moving while remaining responsive.
+                        await new Promise(r => setTimeout(r, 0));
+                    }
                 }
             });
         } catch (err) {

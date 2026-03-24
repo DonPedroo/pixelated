@@ -126,7 +126,7 @@ export function setupSketchGUI(sketch) {
     const { gui, params, themes } = sketch;
 
     // Theme Selection
-    gui.add(params, 'theme', Object.keys(themes)).name('Theme').onChange((v) => sketch.applyTheme(v));
+    const themeDropdown = gui.add(params, 'theme', sketch.themeOptions).name('Theme').onChange((v) => sketch.applyTheme(v));
 
     // Gradient Logic
     const gradientEffect = sketch.gradientEffect;

@@ -1,4 +1,4 @@
-import { uniform, Fn, float, vec3, vec4, color, positionLocal, instanceIndex, vec2, sin, cos, mat3, rotate, positionWorld, step, mod, floor, mix, pass, uv, If, abs } from 'three/tsl';
+import { uniform, Fn, float, vec3, vec4, color, positionLocal, instanceIndex, vec2, sin, cos, mat3, rotate, positionWorld, step, mod, floor, mix, pass, uv, If, abs, varying, modelViewMatrix, smoothstep } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 
 /**
@@ -33,7 +33,11 @@ export class ParticlesEffect {
             particlesWaveDirection: 0,
             particlesWaveSmooth: 0.5,
             particlesWaveInvertAlt: false,
-            particlesBlendMode: 'mix'
+            particlesBlendMode: 'mix',
+            particlesDofEnabled: false,
+            particlesDofFocusDistance: 2.0,
+            particlesDofRange: 5.0,
+            particlesDofScaleMax: 4.0
         };
     }
 
@@ -106,6 +110,10 @@ export class ParticlesEffect {
             uWaveSmooth: uniform(this.params.particlesWaveSmooth),
             uWaveInvertAlt: uniform(this.params.particlesWaveInvertAlt ? 1.0 : 0.0),
             uBlendMode: uniform(this.getBlendModeIndex(this.params.particlesBlendMode)),
+            uDofEnabled: uniform(this.params.particlesDofEnabled ? 1.0 : 0.0),
+            uFocusDistance: uniform(this.params.particlesDofFocusDistance),
+            uDofRange: uniform(this.params.particlesDofRange),
+            uDofScaleMax: uniform(this.params.particlesDofScaleMax),
             uTime: uniform(0)
         };
 
@@ -122,12 +130,19 @@ export class ParticlesEffect {
 
     updateMaterial() {
         if (!this.meshInitialized) return;
-        const { uEnabled, uGridX, uGridY, uShapeX, uShapeY, uSize, uColor, uPosX, uPosY, uPosZ, uRotX, uRotY, uRotZ, uWaveAmp, uWaveFreq, uWaveSpeed, uTime, uWaveDirection, uWaveSmooth, uWaveInvertAlt } = this.uniforms;
+        const { uEnabled, uGridX, uGridY, uShapeX, uShapeY, uSize, uColor, uPosX, uPosY, uPosZ, uRotX, uRotY, uRotZ, uWaveAmp, uWaveFreq, uWaveSpeed, uTime, uWaveDirection, uWaveSmooth, uWaveInvertAlt, uDofEnabled, uFocusDistance, uDofRange, uDofScaleMax } = this.uniforms;
 
         // Discard pixels outside the circle (circle shape)
         this.material.opacityNode = Fn(() => {
             const dist = uv().sub(0.5).length();
-            return float(1.0).sub(step(0.5, dist));
+            
+            // Get blur factor from varying (passed from vertex stage)
+            // We use a small epsilon for the sharpest state
+            const blur = this.vBlurFactor || float(0);
+            const edge1 = float(0.5);
+            const edge2 = edge1.sub(blur.mul(0.45)).sub(0.01);
+            
+            return smoothstep(edge1, edge2, dist);
         })();
 
         this.material.colorNode = uColor;
@@ -175,9 +190,7 @@ export class ParticlesEffect {
             const wave = sin(smoothedDist.mul(uWaveFreq).sub(uTime.mul(uWaveSpeed))).mul(uWaveAmp).mul(invertFactor);
             pos.z.assign(wave);
 
-            // Apply Size
-            const finalPos = positionLocal.mul(uSize).add(pos);
-
+            // Apply Size and Rotation
             // Rotation around X axis
             const cosX = cos(uRotX);
             const sinX = sin(uRotX);
@@ -202,7 +215,18 @@ export class ParticlesEffect {
             // Translation
             const translatedPos = rotZPos.add(vec3(uPosX, uPosY, uPosZ));
 
-            return translatedPos.add(positionLocal.mul(uSize));
+            // DOF Logic
+            const mvPos = modelViewMatrix.mul(vec4(translatedPos, 1.0)).toVar();
+            const distToFocus = abs(mvPos.z.negate().sub(uFocusDistance));
+            const blurFactor = distToFocus.div(uDofRange).clamp(0.0, 1.0).mul(uDofEnabled);
+            
+            // Pass to fragment shader
+            this.vBlurFactor = varying(blurFactor);
+
+            // Scale multiplier based on blur
+            const finalScale = blurFactor.mul(uDofScaleMax).add(1.0);
+
+            return translatedPos.add(positionLocal.mul(uSize).mul(finalScale));
         })();
 
         this.mesh.count = Math.floor(Math.min(this.params.particlesGridX * this.params.particlesGridY, this.maxInstances));
@@ -315,6 +339,12 @@ export class ParticlesEffect {
             if (this.sketch.updatePostProcessing) this.sketch.updatePostProcessing();
         }).listen();
 
+        const dofFolder = folder.addFolder('Depth of Field');
+        dofFolder.add(p, 'particlesDofEnabled').name('Enabled').onChange(v => u.uDofEnabled.value = v ? 1.0 : 0.0).listen();
+        dofFolder.add(p, 'particlesDofFocusDistance', 0, 20).name('Focus Distance').onChange(v => u.uFocusDistance.value = v).listen();
+        dofFolder.add(p, 'particlesDofRange', 0.1, 20).name('Range').onChange(v => u.uDofRange.value = v).listen();
+        dofFolder.add(p, 'particlesDofScaleMax', 0, 10).name('Scale Multiplier').onChange(v => u.uDofScaleMax.value = v).listen();
+
         return folder;
     }
 
@@ -385,6 +415,10 @@ export class ParticlesEffect {
         u.uWaveSmooth.value = params.particlesWaveSmooth;
         u.uWaveInvertAlt.value = params.particlesWaveInvertAlt ? 1.0 : 0.0;
         u.uBlendMode.value = this.getBlendModeIndex(params.particlesBlendMode);
+        u.uDofEnabled.value = params.particlesDofEnabled ? 1.0 : 0.0;
+        u.uFocusDistance.value = params.particlesDofFocusDistance;
+        u.uDofRange.value = params.particlesDofRange;
+        u.uDofScaleMax.value = params.particlesDofScaleMax;
 
         if (this.meshInitialized) {
             this.mesh.visible = params.particlesEnabled;
@@ -444,7 +478,7 @@ export class ParticlesEffect {
             const mixFactor = pColorNode.a.mul(this.uniforms.uEnabled);
             
             const baseColor = finalColor.rgb;
-            const c = pColorNode.rgb;
+            const c = pColorNode.rgb.div(pColorNode.a.max(0.001));
             const blendMode = this.uniforms.uBlendMode;
             const blendResult = vec3(0.0).toVar();
 

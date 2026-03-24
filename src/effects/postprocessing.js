@@ -55,7 +55,9 @@ export class PostProcessingEffect {
             uChromaIterations: uniform(int(this.params.chromaIterations)),
             uDitherEnabled: uniform(this.params.ditherEnabled ? 1 : 0),
             uDitherStrength: uniform(this.params.ditherStrength),
-            uTime: uniform(0)
+            uTime: uniform(0),
+            uLoopDuration: this.sketch.uLoopDuration,
+            uPerfectLoop: this.sketch.uPerfectLoop
         };
         return this.uniforms;
     }
@@ -96,7 +98,7 @@ export class PostProcessingEffect {
     });
 
     buildSamplingNode(inputColorNode, uvNode, uvTransform = null) {
-        const { uChromaAmount, uChromaIterations, uDistortion } = this.uniforms;
+        const { uChromaAmount, uChromaIterations, uDistortion, uLoopDuration, uPerfectLoop } = this.uniforms;
         const applyTransform = (uv) => uvTransform ? uvTransform(uv) : uv;
 
         return Fn(() => {
@@ -158,7 +160,8 @@ export class PostProcessingEffect {
     buildNoiseNode(inputColorNode, uvNode) {
         const {
             uDistortionChromaEnabled, uDistortion,
-            uNoiseIntensity, uNoiseScale, uNoiseBlendingMode, uTime
+            uNoiseIntensity, uNoiseScale, uNoiseBlendingMode, uTime,
+            uPerfectLoop, uLoopDuration
         } = this.uniforms;
 
         return Fn(() => {
@@ -172,7 +175,13 @@ export class PostProcessingEffect {
             });
 
             const noiseCoords = noiseDistUV.mul(uNoiseScale);
-            const timeOffset = this.random(vec2(uTime, uTime.mul(0.123)));
+            
+            // Use periodic time for the noise seed to ensure perfect loop
+            // We use sin/cos to create a circular transition in the seed space
+            const periodicTime = uPerfectLoop.equal(1).select(uTime.mod(uLoopDuration), uTime);
+            const t_noise = periodicTime.mul(float(Math.PI * 2.0)).div(uLoopDuration);
+            const timeOffset = this.random(vec2(sin(t_noise), cos(t_noise)));
+            
             const noiseValue = this.random(noiseCoords.add(timeOffset));
             const noiseCentered = noiseValue.sub(0.5).mul(uNoiseIntensity);
 
@@ -202,12 +211,14 @@ export class PostProcessingEffect {
     }
 
     buildDitherNode(inputColorNode, uvNode) {
-        const { uTime, uDitherEnabled, uDitherStrength } = this.uniforms;
+        const { uTime, uDitherEnabled, uDitherStrength, uPerfectLoop, uLoopDuration } = this.uniforms;
         return Fn(() => {
             const color = vec4(inputColorNode).toVar();
 
             If(uDitherEnabled.equal(1), () => {
-                const ditherNoise = this.random(uvNode.add(fract(uTime)));
+                const periodicTime = uPerfectLoop.equal(1).select(uTime.mod(uLoopDuration), uTime);
+                const t_dither = periodicTime.mul(float(Math.PI * 2.0)).div(uLoopDuration);
+                const ditherNoise = this.random(uvNode.add(vec2(sin(t_dither), cos(t_dither))));
                 const ditheredRes = color.rgb.add(ditherNoise.sub(0.5).mul(2.0 / 255.0).mul(uDitherStrength));
                 color.rgb.assign(ditheredRes);
             });
@@ -292,5 +303,10 @@ export class PostProcessingEffect {
 
         if (this.uniforms.uDitherEnabled) this.uniforms.uDitherEnabled.value = params.ditherEnabled ? 1 : 0;
         if (this.uniforms.uDitherStrength) this.uniforms.uDitherStrength.value = params.ditherStrength;
+    }
+
+    updateSpeeds(isPerfectLoop, duration, quantizeFn) {
+        // Post processing parameters are mostly static or driven by uTime inside the TSL nodes
+        // but we can add quantization here if needed in the future.
     }
 }

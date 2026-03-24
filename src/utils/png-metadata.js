@@ -107,6 +107,8 @@ export async function extractMetadata(file, key) {
     }
 
     let offset = 8; // Skip signature
+    const textChunks = [];
+
     while (offset + 12 <= buffer.byteLength) {
         const length = view.getUint32(offset);
         const typeCharCodes = uint8View.subarray(offset + 4, offset + 8);
@@ -118,16 +120,21 @@ export async function extractMetadata(file, key) {
             const nullIndex = text.indexOf('\0');
             if (nullIndex !== -1) {
                 const chunkKey = text.substring(0, nullIndex);
+                const chunkContent = text.substring(nullIndex + 1);
+                
+                // 1. Direct match check
                 if (chunkKey === key) {
                     try {
-                        const parsed = JSON.parse(text.substring(nullIndex + 1));
-                        console.log("Metadata successfully extracted:", parsed);
+                        const parsed = JSON.parse(chunkContent);
+                        console.log("Metadata successfully extracted with key:", key);
                         return parsed;
                     } catch (e) {
-                        console.error("Failed to parse PNG metadata JSON", e);
-                        return null;
+                        console.error("Failed to parse PNG metadata JSON for key:", key, e);
                     }
                 }
+                
+                // Store all text chunks for fallback
+                textChunks.push({ key: chunkKey, content: chunkContent });
             }
         }
 
@@ -135,7 +142,24 @@ export async function extractMetadata(file, key) {
         offset += 12 + length;
     }
 
-    console.warn("No tEXt chunk with key '" + key + "' found in PNG.");
+    // 2. Fallback: Search all tEXt chunks for valid JSON with 'params'
+    console.log(`Key '${key}' not found. Searching ${textChunks.length} tEXt chunks for fallback metadata...`);
+    
+    for (const chunk of textChunks) {
+        if (chunk.content.includes('{')) {
+            try {
+                const parsed = JSON.parse(chunk.content);
+                // Check if it looks like our sketch settings
+                if (parsed && (parsed.params || parsed.version)) {
+                    console.log(`Found valid fallback metadata under key: '${chunk.key}'`);
+                    return parsed;
+                }
+            } catch (e) {
+                // Not JSON or invalid format, skip
+            }
+        }
+    }
 
+    console.warn("No valid metadata found in PNG.");
     return null;
 }

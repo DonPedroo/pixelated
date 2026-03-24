@@ -164,7 +164,10 @@ export class GradientEffect {
         }).listen();
         warpFolder.add(params, 'gradientWarpStrength', 0, 1).name('Warp Strength').onChange((v) => uniforms.uWarpStrength.value = v).listen();
         warpFolder.add(params, 'gradientWarpScale', 0.1, 10).name('Warp Scale').onChange((v) => uniforms.uWarpScale.value = v).listen();
-        warpFolder.add(params, 'gradientWarpSpeed', 0, 5).name('Warp Speed').onChange((v) => uniforms.uWarpSpeed.value = v).listen();
+        warpFolder.add(params, 'gradientWarpSpeed', 0, 5).name('Warp Speed').onChange((v) => {
+            uniforms.uWarpSpeed.value = v;
+            if (this.sketch.updateAnimationSpeeds) this.sketch.updateAnimationSpeeds();
+        }).listen();
 
         const colorFolder = gradFolder.addFolder('Colors');
         this.colorFolder = colorFolder;
@@ -304,7 +307,9 @@ export const getGradientColorNode = (uvNode, uniforms, params) => {
         uWarpStrength,
         uWarpScale,
         uWarpSpeed,
-        uGlobalTime
+        uGlobalTime,
+        uLoopDuration,
+        uPerfectLoop
     } = uniforms;
 
 
@@ -325,7 +330,12 @@ export const getGradientColorNode = (uvNode, uniforms, params) => {
 
     // Warping Logic
     const warpedUv = centeredUv.toVar();
-    const t_time = uGlobalTime ? uGlobalTime.mul(uWarpSpeed) : float(0.0);
+    
+    // Use periodic time for warping to ensure perfect loops
+    // We use mod(uLoopDuration) to handle both live playback and export cases safely
+    const periodicTime = uPerfectLoop.equal(1).select(uGlobalTime.mod(uLoopDuration), uGlobalTime);
+    const t_time = periodicTime.mul(uWarpSpeed);
+    const t_angle = periodicTime.mul(float(Math.PI * 2.0)).div(uLoopDuration);
 
     If(uWarpMode.equal(1), () => { // Wave
         const waveOffset = vec2(
@@ -334,7 +344,13 @@ export const getGradientColorNode = (uvNode, uniforms, params) => {
         ).mul(uWarpStrength);
         warpedUv.addAssign(waveOffset);
     }).ElseIf(uWarpMode.equal(2), () => { // Noise
-        const noiseInput = vec3(centeredUv.mul(uWarpScale), t_time);
+        // For a perfect loop in 3D noise, we move through a circular path in the Z dimension
+        // by utilizing sin/cos of the normalized periodic time.
+        const radius = float(1.0); // Radius in noise space
+        const noiseInput = vec3(
+            centeredUv.mul(uWarpScale), 
+            sin(t_angle).mul(radius)
+        );
         const noiseOffset = mx_fractal_noise_vec3(noiseInput).xy.sub(0.5).mul(uWarpStrength.mul(2.0));
         warpedUv.addAssign(noiseOffset);
     });
@@ -435,5 +451,11 @@ export const getGradientColorNode = (uvNode, uniforms, params) => {
  * Core animation logic for the gradient is handled in the main material based on uAnimationSpeed.
  */
 GradientEffect.prototype.updateSpeeds = function (isPerfectLoop, duration, quantizeFn) {
-    // Gradient animation speeds are currently handled by index.js via uAnimationSpeed
+    if (this.uniforms.uWarpSpeed) {
+        let speed = this.params.gradientWarpSpeed !== undefined ? this.params.gradientWarpSpeed : 0.1;
+        if (isPerfectLoop) {
+            speed = quantizeFn(speed, duration);
+        }
+        this.uniforms.uWarpSpeed.value = speed;
+    }
 };
